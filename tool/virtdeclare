@@ -55,7 +55,7 @@ def hasDefChanged(foundXML, subjectXML, specDefXML):
             if diff.value == sdiff.value:
                 found_match = True
                 break
-        if not found_match: return True
+        if found_match: return True
     return False 
 
 try:
