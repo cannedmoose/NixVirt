@@ -24,7 +24,7 @@ try:
         allObjects = oc.getAll()
         keepUUIDs = [subject.uuid for (subject,item) in subjectitemlist]
         for object in allObjects:
-            if object.uuid in keepUUIDs:
+            if object.uuid in keepUUIDs or not object_lvobj.isPersistent():
                 pass
             else:
                 object.undefine()
