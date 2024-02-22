@@ -109,6 +109,9 @@ class VObject:
 
     def isActive(self):
         return self.lvobj.isActive()
+    
+    def isPersistent(self):
+        return self.lvobj.isPersistent()
 
     def activate(self):
         if not self.isActive():
@@ -128,7 +131,7 @@ class VObject:
         return self.oc.XMLDesc(self.lvobj)
 
     def undefine(self):
-        isPersistent = self.lvobj.isPersistent()
+        isPersistent = self.isPersistent()
         self.deactivate()
 
         if isPersistent:
