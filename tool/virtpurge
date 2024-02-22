@@ -28,7 +28,7 @@ try:
     keepUUIDs = set(map(getFileUUID,keepFiles))
 
     for object in allObjects:
-        if object.uuid in keepUUIDs or object.isPersistent():
+        if object.uuid in keepUUIDs or not object.isPersistent():
             pass
         else:
             object.undefine()
