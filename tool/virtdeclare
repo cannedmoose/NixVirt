@@ -19,10 +19,44 @@ args = parser.parse_args()
 
 setstate = args.state
 
-def hasDefChanged(foundXML, subjectXML):
-    diff = main.diff_trees(foundDefXML, subjectDefXML)
-    # If all changes are mac address we can safely ignore
-    return not all([d.node.split("/")[-1].startswith("mac") and d.name == "address" for d in diff])
+
+### HMM IT IS A SUBSTANTIAL CHANGE IF MAC IS DECLARED IN THE specDef and is different from the foundDef
+def hasDefChanged(foundXML, subjectXML, specDefXML):
+    # so we compare found to subject
+    # also subject to spec
+    # if there's a mac addres change in found to subject
+        # if there's a matching change in spec -> subject
+            # it is substantial
+        # otherwise it is not? 
+    libvirtDiff = main.diff_trees(foundDefXML, subjectXML)
+    specDiff = main.diff_trees(specDefXML, subjectXML)
+
+    for diff in libvirtDiff:
+        # Any diff that's not insertion or change of a mac address we don't care about
+        if type(diff).__name__ != "UpdateAttrib" and type(diff).__name__ != "InsertAttrib":
+            return True
+        if not diff.node.split("/")[-1].startswith("mac"):
+            return True
+        if not diff.name == "address":
+            return True
+        
+        # It may just be a an automated mac address change - check specdiff to see
+        found_match = False
+        for sdiff in specDiff:
+            # Any diff that's not insertion or change of a mac address we don't care about
+            if type(sdiff).__name__ != "UpdateAttrib" and type(sdiff).__name__ != "InsertAttrib":
+                continue
+            if not sdiff.node.split("/")[-1].startswith("mac"):
+                continue
+            if not sdiff.name == "address":
+                continue
+            print(diff)
+            print(sdiff)
+            if diff.value == sdiff.value:
+                found_match = True
+                break
+        if not found_match: return True
+    return False 
 
 try:
     oc = nixvirt.getObjectConnection(args.connect,args.type,args.verbose)
@@ -47,7 +81,7 @@ try:
             subjectDef = subject.XMLDesc()
             subjectDefXML = lxml.etree.fromstring(subjectDef)
 
-            defchanged = hasDefChanged(foundDefXML, subjectDefXML)
+            defchanged = hasDefChanged(foundDefXML, subjectDefXML, specDefXML)
             oc.vreport(specUUID,"changed" if defchanged else "unchanged")
             if defchanged and (setstate != "inactive"):
                 found.deactivate()
