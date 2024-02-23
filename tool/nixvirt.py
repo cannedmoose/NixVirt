@@ -1,4 +1,4 @@
-import sys, uuid, lxml, libvirt
+import sys, uuid, lxml, libvirt, subprocess
 from xmldiff import main as xmldiff
 
 # Switch off annoying libvirt stderr messages
@@ -29,7 +29,8 @@ class Session:
         self.postHooks.append(hook)
     
     def executePostHooks(self):
-        pass #TODO
+        for hook in self.postHooks:
+            subprocess.run(hook)
 
 class ObjectConnection:
     def __init__(self,type,session):
@@ -112,7 +113,7 @@ class ObjectConnection:
         return self.fromDefinition(specDef)
     
     def _hasDefinitionChanged(self,specDef,foundDef,subjectDef):
-        return foundDef == subjectDef
+        return foundDef != subjectDef
 
 class DomainConnection(ObjectConnection):
     def __init__(self,session):
@@ -128,7 +129,8 @@ class DomainConnection(ObjectConnection):
     def _descriptionXMLText(self,lvobj):
         # https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainXMLFlags
         # VIR_DOMAIN_XML_INACTIVE
-        return lvobj.XMLDesc(flags=2)
+        return lvobj.XMLDesc()
+        #return lvobj.XMLDesc(flags=2)
     def _undefine(self,lvobj):
         # https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainUndefineFlagsValues
         # VIR_DOMAIN_UNDEFINE_MANAGED_SAVE
@@ -136,7 +138,6 @@ class DomainConnection(ObjectConnection):
         # VIR_DOMAIN_UNDEFINE_KEEP_TPM
         lvobj.undefineFlags(flags=73)
     def _hasDefinitionChanged(self,specDef,foundDef,subjectDef):
-        # TODO 
         # Check number of network interface between spec and found if they don't match def has changed 
         # for each interface in specdef
         #    match with interface in found and subject
@@ -147,7 +148,43 @@ class DomainConnection(ObjectConnection):
         #    if mac found just compare as text FOPR INTERFACE
         # remove all interfaces from XML
         # compare rest as text
-        return foundDef == subjectDef
+
+        specDefXML = lxml.etree.fromstring(specDef)
+        foundDefXML = lxml.etree.fromstring(foundDef)
+        subjectDefXML = lxml.etree.fromstring(subjectDef)
+
+        # TODO deal with bridges
+        specNetworkIntfs = specDefXML.xpath("/domain/devices/interface[@type='network']")
+        foundNetworkIntfs = foundDefXML.xpath("/domain/devices/interface[@type='network']")
+        subjectNetworkIntfs = subjectDefXML.xpath("/domain/devices/interface[@type='network']")
+
+        if len(specNetworkIntfs) != len(foundNetworkIntfs):
+            return True
+
+        for i, specIntf in enumerate(specNetworkIntfs):
+            foundIntf = foundNetworkIntfs[i]
+            subjectIntf = subjectNetworkIntfs[i]
+
+            specMac = specDefXML.xpath("/network/mac/@address")
+            if not specMac:
+                diff = xmldiff.diff_texts(lxml.etree.tostring(foundIntf), lxml.etree.tostring(subjectIntf))
+                if len(diff) == 0: return False
+                if len(diff) > 1:
+                    return True
+                diff = diff[0]
+                if type(diff).__name__ == "UpdateAttrib" and diff.node == "/interface/mac[1]" and diff.name == "address":
+                    continue
+                return True
+            elif lxml.etree.tostring(foundIntf) != lxml.etree.tostring(subjectIntf):
+                return True
+        
+        for e in foundNetworkIntfs:
+            e.getparent().remove(e)
+
+        for e in subjectNetworkIntfs:
+            e.getparent().remove(e)
+
+        return lxml.etree.tostring(foundDefXML) != lxml.etree.tostring(subjectDefXML)
 
 class NetworkConnection(ObjectConnection):
     def __init__(self,session):
@@ -178,19 +215,21 @@ class NetworkConnection(ObjectConnection):
         return deps
     def _addReconnectHooks(self, obj):
         net_name = str(obj.descriptionXMLETree().find("name").text)
-        names = [str(name) for name in obj.descriptionXMLETree().xpath("/network/bridge/@name")]
+
+        # TODO domains
+        # can skip:
+        # domains that will be deactive after activation
+        # domains that will be deactivated as part of activation
         domains = DomainConnection(self.session).getAll()
         for domain in domains:
-            # Check for bridges TODO is this necessary - haven't tested whether it breaks for bridges
-            intfs = domain.descriptionXMLETree().xpath("/domain/devices/interface/source/@bridge")
+            # TODO deal with bridges
+            intfs = domain.descriptionXMLETree().xpath("/domain/devices/interface[@type='network']")
             for intf in intfs:
-                if str(intf) in names:
-                    self.session.addPostHook(["brctl"]) # TODO
-            
-            intfs = domain.descriptionXMLETree().xpath("/domain/devices/interface/source/@network")
-            for intf in intfs:
-                if str(intf) == net_name:
-                    self.session.addPostHook(["brctl"]) # TODO
+                intf_net_name = (intf.xpath("./source/@network") or [""])[0]
+                net_bridge = (intf.xpath("./source/@bridge") or [""])[0]
+                net_target = (intf.xpath("./target/@dev") or [""])[0]
+                if intf_net_name == net_name and net_bridge != "" and net_target != "":
+                    self.session.addPostHook(["brctl", "addif", net_bridge, net_target])
     def _hasDefinitionChanged(self,specDef,foundDef,subjectDef):
         # find mac in spec
         #   if none then check xmldiff between found and subject
@@ -199,15 +238,18 @@ class NetworkConnection(ObjectConnection):
         #   if mac found just compare as text
         specDefXML = lxml.etree.fromstring(specDef)
 
-        specMac = specDefXML.findText("/network/mac/@address")
+        specMac = specDefXML.xpath("/network/mac/@address")
+
         if not specMac:
-            diff = xmldiff.diff_text(foundDef, subjectDef)
+            diff = xmldiff.diff_texts(foundDef, subjectDef)
             if len(diff) == 0: return False
             if len(diff) > 1: return True
-
-            if diff[0]
+            diff = diff[0]
+            if type(diff).__name__ == "UpdateAttrib" and diff.node == "/network/mac[1]" and diff.name == "address":
+                return False
+            return True
         else:
-            return foundDef == subjectDef
+            return foundDef != subjectDef
 
 # https://libvirt.org/html/libvirt-libvirt-storage.html
 class PoolConnection(ObjectConnection):

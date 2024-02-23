@@ -115,6 +115,7 @@ let
                   wantedBy = [ "multi-user.target" ];
                   requires = [ "libvirtd.service" ];
                   after = [ "libvirtd.service" ];
+                  path = [ packages.bridge-utils ];
                   inherit script;
                 };
             }

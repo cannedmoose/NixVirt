@@ -37,6 +37,8 @@ try:
     for (oc,subjectitemlist) in subjectpairs:
         for (subject,item) in subjectitemlist:
             subject.setActive(item.get("active"))
+    
+    session.executePostHooks()
 
 except libvirt.libvirtError as err:
     print ("NixVirt: error:", err, file=sys.stderr)
