@@ -1,4 +1,5 @@
 import sys, uuid, lxml, libvirt
+from xmldiff import main as xmldiff
 
 # Switch off annoying libvirt stderr messages
 # https://stackoverflow.com/a/45543887
@@ -11,6 +12,7 @@ class Session:
         self.conn = libvirt.open(uri)
         self.verbose = verbose
         self.tempDeactivated = set()
+        self.postHooks = []
 
     def vreport(self,msg):
         if self.verbose:
@@ -22,6 +24,12 @@ class Session:
 
     def _wasTempDeactivated(self,oc,uuid):
         return (oc.type,uuid) in self.tempDeactivated
+    
+    def addPostHook(self, hook):
+        self.postHooks.append(hook)
+    
+    def executePostHooks(self):
+        pass #TODO
 
 class ObjectConnection:
     def __init__(self,type,session):
@@ -59,6 +67,9 @@ class ObjectConnection:
     def _getDependents(self,obj):
         return []
 
+    def _addReconnectHooks(self, obj):
+        pass
+
     def _tempDeactivateDependents(self,obj):
         dependents = self._getDependents(obj)
         for dependent in dependents:
@@ -84,10 +95,12 @@ class ObjectConnection:
             self.vreport(specUUID,"redefine")
             subject = self._fromXML(specDef)
             subjectDef = subject.descriptionXMLText()
-            defchanged = foundDef != subjectDef
+            defchanged = self._hasDefinitionChanged(specDef,foundDef,subjectDef)
             self.vreport(specUUID,"changed" if defchanged else "unchanged")
             if defchanged:
                 found._deactivate(temp = True)
+            else:
+                subject = self._fromXML(foundDef)
             return subject
         else:
             self.vreport(specUUID,"define new")
@@ -97,6 +110,9 @@ class ObjectConnection:
         with open(path,"r") as f:
             specDef = f.read()
         return self.fromDefinition(specDef)
+    
+    def _hasDefinitionChanged(self,specDef,foundDef,subjectDef):
+        return foundDef == subjectDef
 
 class DomainConnection(ObjectConnection):
     def __init__(self,session):
@@ -119,6 +135,19 @@ class DomainConnection(ObjectConnection):
         # VIR_DOMAIN_UNDEFINE_KEEP_NVRAM
         # VIR_DOMAIN_UNDEFINE_KEEP_TPM
         lvobj.undefineFlags(flags=73)
+    def _hasDefinitionChanged(self,specDef,foundDef,subjectDef):
+        # TODO 
+        # Check number of network interface between spec and found if they don't match def has changed 
+        # for each interface in specdef
+        #    match with interface in found and subject
+        #    find mac in spec
+        #    if none then check xmldiff between found and subject
+        #        if only change is mac report no change FOR INTERFACE
+        #        otherwise report change
+        #    if mac found just compare as text FOPR INTERFACE
+        # remove all interfaces from XML
+        # compare rest as text
+        return foundDef == subjectDef
 
 class NetworkConnection(ObjectConnection):
     def __init__(self,session):
@@ -147,6 +176,38 @@ class NetworkConnection(ObjectConnection):
                     deps.append(domain)
                     break
         return deps
+    def _addReconnectHooks(self, obj):
+        net_name = str(obj.descriptionXMLETree().find("name").text)
+        names = [str(name) for name in obj.descriptionXMLETree().xpath("/network/bridge/@name")]
+        domains = DomainConnection(self.session).getAll()
+        for domain in domains:
+            # Check for bridges TODO is this necessary - haven't tested whether it breaks for bridges
+            intfs = domain.descriptionXMLETree().xpath("/domain/devices/interface/source/@bridge")
+            for intf in intfs:
+                if str(intf) in names:
+                    self.session.addPostHook(["brctl"]) # TODO
+            
+            intfs = domain.descriptionXMLETree().xpath("/domain/devices/interface/source/@network")
+            for intf in intfs:
+                if str(intf) == net_name:
+                    self.session.addPostHook(["brctl"]) # TODO
+    def _hasDefinitionChanged(self,specDef,foundDef,subjectDef):
+        # find mac in spec
+        #   if none then check xmldiff between found and subject
+        #      if only change is mac report no change
+        #      otherwise report change
+        #   if mac found just compare as text
+        specDefXML = lxml.etree.fromstring(specDef)
+
+        specMac = specDefXML.findText("/network/mac/@address")
+        if not specMac:
+            diff = xmldiff.diff_text(foundDef, subjectDef)
+            if len(diff) == 0: return False
+            if len(diff) > 1: return True
+
+            if diff[0]
+        else:
+            return foundDef == subjectDef
 
 # https://libvirt.org/html/libvirt-libvirt-storage.html
 class PoolConnection(ObjectConnection):
@@ -196,9 +257,9 @@ class VObject:
 
     def _deactivate(self,temp = False):
         if self.isActive():
-            self.oc._tempDeactivateDependents(self)
             if temp:
                 self.oc._recordTempDeactivated(self.uuid)
+                self.oc._addReconnectHooks(self)
             self.vreport("deactivate (temporary)" if temp else "deactivate")
             self._lvobj.destroy()
 
