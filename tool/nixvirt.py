@@ -58,6 +58,12 @@ class ObjectConnection:
 
     def fromName(self,name):
         return self._fromLVObject(self._lookupByName(name))
+    
+    def fromNameOrNone(self,objid):
+        try:
+            return self.fromName(objid)
+        except libvirt.libvirtError:
+            return None
 
     def _fromXML(self,defn):
         return self._fromLVObject(self._defineXML(defn))
@@ -84,8 +90,16 @@ class ObjectConnection:
 
     def fromDefinition(self,specDef):
         specDefXML = lxml.etree.fromstring(specDef)
-        specUUID = uuid.UUID(specDefXML.find("uuid").text).bytes
-        found = self.fromUUIDOrNone(specUUID)
+        specUUID = specDefXML.find("uuid")
+        specName = specDefXML.find("name")
+
+        if specName:
+            specName = specName.text
+        if specUUId:
+            specUUID = uuid.UUID(specUUID.text).bytes
+        
+        found = self.fromUUIDOrNone(specUUID) or self.fromNameOrNone(specName)
+
         if found is not None:
             foundDef = found.descriptionXMLText()
             foundDefXML = lxml.etree.fromstring(foundDef)
@@ -93,18 +107,18 @@ class ObjectConnection:
             specName = specDefXML.find("name").text
             if foundName != specName:
                 found.undefine()
-            self.vreport(specUUID,"redefine")
+            self.vreport(specUUID or specName,"redefine")
             subject = self._fromXML(specDef)
             subjectDef = subject.descriptionXMLText()
             defchanged = self._hasDefinitionChanged(specDef,foundDef,subjectDef)
-            self.vreport(specUUID,"changed" if defchanged else "unchanged")
+            self.vreport(specUUID or specName,"changed" if defchanged else "unchanged")
             if defchanged:
                 found._deactivate(temp = True)
             else:
                 subject = self._fromXML(foundDef)
             return subject
         else:
-            self.vreport(specUUID,"define new")
+            self.vreport(specUUID or specName,"define new")
             return self._fromXML(specDef)
 
     def fromDefinitionFile(self,path):
