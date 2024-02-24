@@ -95,7 +95,7 @@ class ObjectConnection:
 
         if specName:
             specName = specName.text
-        if specUUId:
+        if specUUID:
             specUUID = uuid.UUID(specUUID.text).bytes
         
         found = self.fromUUIDOrNone(specUUID) or self.fromNameOrNone(specName)
