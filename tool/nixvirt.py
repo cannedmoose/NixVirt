@@ -93,12 +93,12 @@ class ObjectConnection:
         specUUID = specDefXML.find("uuid")
         specName = specDefXML.find("name")
 
-        if specName:
+        if specName != None:
             specName = specName.text
-        if specUUID:
+            found = self.fromNameOrNone(specName)
+        if specUUID != None:
             specUUID = uuid.UUID(specUUID.text).bytes
-        
-        found = self.fromUUIDOrNone(specUUID) or self.fromNameOrNone(specName)
+            found = self.fromUUIDOrNone(specUUID)
 
         if found is not None:
             foundDef = found.descriptionXMLText()
