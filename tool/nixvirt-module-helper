@@ -25,8 +25,10 @@ class TypeSpec:
                 object.undefine()
 
     def define(self):
+        defineResults = {}
         for objspec in self.specList:
-            objspec.define()
+            defineResults[objspec.specName] = objspec.define()
+        return defineResults
 
     def setActive(self):
         for objspec in self.specList:
@@ -36,6 +38,7 @@ try:
     session = nixvirt.Session(args.connect,args.verbose)
 
     types = [("network","networks"),("pool","pools"),("domain","domains")]
+    defineResults = {}
 
     typeSpecs = []
     for (type,key) in types:
@@ -49,11 +52,27 @@ try:
 
     # define new stuff
     for typeSpec in typeSpecs:
-        typeSpec.define()
+        defineResults[typeSpec.type] = typeSpec.define()
 
     # do activation
     for typeSpec in typeSpecs:
         typeSpec.setActive()
+    
+    # reset network for Domains that had a network change
+    network_results = defineResults["network"]
+    domain_results = defineResults["domain"]
+    networkSession = nixvirt.getObjectConnection(session,"network")
+    domainSession = nixvirt.getObjectConnection(session,"network")
+    for network in network_results:
+        result = network_results[network]
+
+        if result != "changed": continue
+        network = networkSession.fromNameOrNone(network)
+        for dependent in network._getDependents(network):
+            name = dependent.descriptionXMLETree().find("name").text
+            if name in result and result[name] == "unchanged":
+                 
+
 
 except libvirt.libvirtError as err:
     print ("NixVirt: libvirt error:", err, file=sys.stderr)
