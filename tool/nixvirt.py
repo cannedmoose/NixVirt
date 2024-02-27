@@ -80,7 +80,7 @@ class DomainConnection(ObjectConnection):
     def _descriptionXMLText(self,lvobj):
         # https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainXMLFlags
         # VIR_DOMAIN_XML_INACTIVE
-        return lvobj.XMLDesc(flags=2)
+        return lvobj.XMLDesc()
     def _undefine(self,lvobj):
         # https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainUndefineFlagsValues
         # VIR_DOMAIN_UNDEFINE_MANAGED_SAVE
@@ -93,12 +93,12 @@ class DomainConnection(ObjectConnection):
         subjectXML = subject.descriptionXMLETree()
 
         # fill UID
-        specUUID = specDefXML.xpath("/domain/uuid[1]")
-        subjectUUID = subjectXML.xpath("/domain/uuid[1]")
-        if subjectUUID is not None and  specUUID is None:
+        specUUID = specDefXML.xpath("/domain/uuid")
+        subjectUUID = subjectXML.xpath("/domain/uuid")
+        if len(subjectUUID) == 1 and  len(specUUID) == 0:
             uuid = lxml.etree.Element("uuid")
-            uuid.text = subjectUUID.text
-            resultXML.find("domain").append(uuid)
+            uuid.text = subjectUUID[0].text
+            resultXML.append(uuid)
             
         # Fill Macs in interfaces
         specInterfaces = resultXML.xpath("/domain/devices/interface")
@@ -115,15 +115,15 @@ class DomainConnection(ObjectConnection):
             subjectType = subjectInterface.attrib["type"]
             specType = subjectInterface.attrib["type"]
 
-            specMac = specInterface.xpath("/interface/mac/@address[1]")
-            subjectMac = subjectInterface.xpath("/interface/mac/@address[1]")
+            specMac = specInterface.xpath("/interface/mac/@address")
+            subjectMac = subjectInterface.xpath("/interface/mac/@address")
 
             if subjectType != specType: return resultXML
-            if specMac != subjectMac and specMac is not None: return resultXML
+            if specMac != subjectMac and len(specMac) > 0: return resultXML
 
-            if specMac is None and subjectMac is not None:
+            if len(specMac) == 0 and len(subjectMac) == 1:
                 mac = lxml.etree.Element("mac")
-                mac.attrib["address"] = subjectMac
+                mac.attrib["address"] = subjectMac[0]
                 newMacs.append(mac)
             else:
                 newMacs.append(None)
@@ -173,20 +173,20 @@ class NetworkConnection(ObjectConnection):
         subjectXML = subject.descriptionXMLETree()
 
         # fill UID
-        specUUID = specDefXML.xpath("/network/uuid[1]")
-        subjectUUID = subjectXML.xpath("/network/uuid[1]")
-        if subjectUUID is not None and  specUUID is None:
+        specUUID = specDefXML.xpath("/network/uuid")
+        subjectUUID = subjectXML.xpath("/network/uuid")
+        if len(subjectUUID) == 1 and  len(specUUID) == 0:
             uuid = lxml.etree.Element("uuid")
-            uuid.text = subjectUUID.text
-            resultXML.find("network").append(uuid)
+            uuid.text = subjectUUID[0].text
+            resultXML.append(uuid)
         
-        specMac = resultXML.xpath("/network/mac/@address[1]")
-        subjectMac = subjectXML.xpath("/network/mac/@address[1]")
+        specMac = resultXML.xpath("/network/mac/@address")
+        subjectMac = subjectXML.xpath("/network/mac/@address")
 
-        if specMac is None and subjectMac is not None:
+        if len(specMac) == 0 and len(subjectMac) == 1:
             mac = lxml.etree.Element("mac")
-                mac.attrib["address"] = subjectMac
-                resultXML.find("network").append(mac)
+            mac.attrib["address"] = subjectMac[0]
+            resultXML.append(mac)
         
         return resultXML
 
@@ -272,14 +272,14 @@ class ObjectSpec:
         specDefXML = lxml.etree.fromstring(specDef)
 
         # Domain def must contain name, UUID is optional
-        self.specName = self.specDefXML.find("name").text
+        self.specName = specDefXML.find("name").text
 
-        specUUIDElem = self.specDefXML.find("uuid")
+        specUUIDElem = specDefXML.find("uuid")
         if specUUIDElem is not None:
-            self.specUUID = uuid.UUID(specUUIDElem).bytes
-            self.subject = oc.fromUUIDOrNone(specUUID)
+            self.specUUID = uuid.UUID(specUUIDElem.text).bytes
+            self.subject = oc.fromUUIDOrNone(self.specUUID)
         else:
-            self.subject = oc.fromNameOrNone(specName)
+            self.subject = oc.fromNameOrNone(self.specName)
             self.specUUID = self.subject.uuid
         
         self.specDefXML = oc._fixDefinitionXML(self.subject, specDefXML)

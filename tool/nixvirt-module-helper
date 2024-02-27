@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import sys, argparse, uuid, lxml.etree, json, libvirt, nixvirt
+import sys, argparse, uuid, lxml.etree, json, libvirt, nixvirt, subprocess
 
 parser = argparse.ArgumentParser(prog='nixvirt-module-helper',description='Define and control a collection of libvirt objects idempotently.')
 parser.add_argument('-v', '--verbose', action='store_true', help='report actions to stderr')
@@ -13,6 +13,7 @@ with open(args.settingspath,"r") as f:
 class TypeSpec:
     def __init__(self,session,type,itemlist):
         self.oc = nixvirt.getObjectConnection(session,type)
+        self.type = type
         self.specList = [nixvirt.ObjectSpec.fromDefinitionFile(self.oc,item["definition"],item.get("active")) for item in itemlist]
 
     def deleteOld(self):
@@ -62,15 +63,32 @@ try:
     network_results = defineResults["network"]
     domain_results = defineResults["domain"]
     networkSession = nixvirt.getObjectConnection(session,"network")
-    domainSession = nixvirt.getObjectConnection(session,"network")
-    for network in network_results:
-        result = network_results[network]
+    domainSession = nixvirt.getObjectConnection(session,"domain")
+    shouldReset = set()
+    for network_name in network_results:
+        result = network_results[network_name]
 
         if result != "changed": continue
-        network = networkSession.fromNameOrNone(network)
-        for dependent in network._getDependents(network):
-            name = dependent.descriptionXMLETree().find("name").text
-            if name in result and result[name] == "unchanged":
+        network = networkSession.fromNameOrNone(network_name)
+        for dependent in networkSession._getDependents(network):
+            if not dependent.isActive(): continue
+            dependentXML = dependent.descriptionXMLETree()
+            name = dependentXML.find("name").text
+            if name not in domain_results or domain_results[name] != "unchanged":
+                continue
+            intfs = dependentXML.xpath(f"/domain/devices/interface[@type='network']/source[@network='{network_name}']")
+            for intf in intfs:
+                net_bridge = (intf.xpath("./@bridge") or [None])[0]
+                net_target = (intf.getparent().xpath("./target/@dev") or [None])[0]
+                if net_bridge is not None and net_target is not None:
+                    subprocess.run(["brctl", "addif", net_bridge, net_target])
+                else:
+                    shouldReset.add(name)
+    for reset in shouldReset:
+        domain = domainSession.fromName(name)
+        domain._deactivate()
+        domain._activate()
+
                  
 
 
