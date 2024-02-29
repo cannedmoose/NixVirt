@@ -77,10 +77,13 @@ class DomainConnection(ObjectConnection):
         return self.conn.lookupByName(name)
     def _defineXML(self,defn):
         return self.conn.defineXML(defn)
-    def _descriptionXMLText(self,lvobj):
+    def _descriptionXMLText(self,lvobj, active = False):
         # https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainXMLFlags
         # VIR_DOMAIN_XML_INACTIVE
-        return lvobj.XMLDesc()
+        if active:
+            return lvobj.XMLDesc()
+        else:
+            return lvobj.XMLDesc(flags=2)
     def _undefine(self,lvobj):
         # https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainUndefineFlagsValues
         # VIR_DOMAIN_UNDEFINE_MANAGED_SAVE
@@ -146,10 +149,13 @@ class NetworkConnection(ObjectConnection):
     def _defineXML(self,defn):
         # https://libvirt.org/formatnetwork.html
         return self.conn.networkDefineXML(defn)
-    def _descriptionXMLText(self,lvobj):
+    def _descriptionXMLText(self,lvobj, active = False):
         # https://libvirt.org/html/libvirt-libvirt-network.html#virNetworkXMLFlags
         # VIR_NETWORK_XML_INACTIVE
-        return lvobj.XMLDesc(flags=1)
+        if active:
+            return lvobj.XMLDesc()
+        else:
+            return lvobj.XMLDesc(flags=1)
     def _getDependents(self,obj):
         networknames = [name.text for name in obj.descriptionXMLETree().xpath("/network/name")]
         bridgenames = [str(name) for name in obj.descriptionXMLETree().xpath("/network/bridge/@name")]
@@ -252,11 +258,11 @@ class VObject:
         self.vreport("set autostart true" if a else "set autostart false")
         self._lvobj.setAutostart(a)
 
-    def descriptionXMLText(self):
-        return self.oc._descriptionXMLText(self._lvobj)
+    def descriptionXMLText(self, active = False):
+        return self.oc._descriptionXMLText(self._lvobj, active)
 
-    def descriptionXMLETree(self):
-        return lxml.etree.fromstring(self.descriptionXMLText())
+    def descriptionXMLETree(self, active = False):
+        return lxml.etree.fromstring(self.descriptionXMLText(active))
 
     def undefine(self):
         isPersistent = self._lvobj.isPersistent()

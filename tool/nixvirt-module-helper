@@ -72,7 +72,7 @@ try:
         network = networkSession.fromNameOrNone(network_name)
         for dependent in networkSession._getDependents(network):
             if not dependent.isActive(): continue
-            dependentXML = dependent.descriptionXMLETree()
+            dependentXML = dependent.descriptionXMLETree(True)
             name = dependentXML.find("name").text
             if name not in domain_results or domain_results[name] != "unchanged":
                 continue
