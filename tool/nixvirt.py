@@ -22,7 +22,10 @@ class ObjectConnection:
         self.conn = session.conn
 
     def vreport(self,objid,msg):
-        self.session.vreport(self.type + " " + str(uuid.UUID(bytes=objid)) + ": " + msg)
+        i = "NULL"
+        if objid:
+            i = str(uuid.UUID(bytes=objid))
+        self.session.vreport(self.type + " " + i + ": " + msg)
 
     def getAll(self):
         return map(lambda lvobj: VObject(self,lvobj), self._getAllLV())
