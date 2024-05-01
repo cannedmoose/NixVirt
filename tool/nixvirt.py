@@ -286,7 +286,9 @@ class ObjectSpec:
             self.subject = oc.fromUUIDOrNone(self.specUUID)
         else:
             self.subject = oc.fromNameOrNone(self.specName)
-            self.specUUID = self.subject.uuid
+            self.specUUID = None
+            if self.subject:
+                self.specUUID = self.subject.uuid
         
         self.specDefXML = oc._fixDefinitionXML(self.subject, specDefXML)
         self.specDef = lxml.etree.tostring(self.specDefXML).decode("utf-8")
