@@ -15,6 +15,40 @@ let
         (subelem "memory" [ (subattr "unit" typeString) ] (sub "count" typeInt))
         (subelem "currentMemory" [ (subattr "unit" typeString) ] (sub "count" typeInt))
         (subelem "vcpu" [ (subattr "placement" typeString) ] (sub "count" typeInt))
+        (subelem "iothreads" [ ] (sub "count" typeInt))
+        (subelem "cputune" [ ] [
+          (subelem "vcpupin" [ (subattr "vcpu" typeInt) (subattr "cpuset" typeString) ] [ ])
+          (subelem "emulatorpin" [ (subattr "cpuset" typeString) ] [ ])
+          (subelem "iothreadpin" [ (subattr "iothread" typeInt) (subattr "cpuset" typeString) ] [ ])
+          (subelem "shares" [ ] typeInt)
+          (subelem "period" [ ] typeInt)
+          (subelem "quota" [ ] typeInt)
+          (subelem "global_period" [ ] typeInt)
+          (subelem "global_quota" [ ] typeInt)
+          (subelem "emulator_period" [ ] typeInt)
+          (subelem "emulator_quota" [ ] typeInt)
+          (subelem "iothread_period" [ ] typeInt)
+          (subelem "iothread_quota" [ ] typeInt)
+          (subelem "vcpusched" [ (subattr "vcpus" typeString) (subattr "scheduler" typeString) (subattr "priority" typeInt) ] [ ])
+          (subelem "iothreadsched" [ (subattr "iothreads" typeInt) (subattr "scheduler" typeString) ] [ ])
+          (subelem "cachetune" [ (subattr "vcpus" typeString) ] [
+            (subelem "cache" [ (subattr "id" typeInt) (subattr "level" typeInt) (subattr "type" typeString) (subattr "size" typeInt) (subattr "unit" typeString) ] [ ])
+            (subelem "monitor" [ (subattr "level" typeInt) (subattr "vcpus" typeString) ] [ ])
+          ])
+          (subelem "memorytune" [ (subattr "vcpus" typeString) ] [
+            (subelem "node" [ (subattr "id" typeInt) (subattr "bandwidth" typeInt) ] [ ])
+          ])
+        ])
+
+        (subelem "sysinfo" [ (subattr "type" typeString) ] [
+          (subelem "bios" [ ] [
+            (subelem "entry" [ (subattr "name" typeString) ] (sub "value" typeString))
+          ])
+          (subelem "system" [ ] [
+            (subelem "entry" [ (subattr "name" typeString) ] (sub "value" typeString))
+          ])
+        ])
+
         (subelem "os" [ ]
           [
             (elem "type" [ (subattr "arch" typeString) (subattr "machine" typeString) ] (sub "type" typeString))
@@ -31,12 +65,20 @@ let
             (subelem "kernel" [ ] (sub "path" typePath))
             (subelem "initrd" [ ] (sub "path" typePath))
             (subelem "cmdline" [ ] (sub "options" typeString))
+            (subelem "smbios" [ (subattr "mode" typeString) ] [ ])
           ]
         )
         (subelem "memoryBacking" [ ]
           [
+            (subelem "hugepages" [ ] [
+              (subelem "page" [ (subattr "size" typeInt) (subattr "unit" typeString) (subattr "nodeset" typeString) ] [ ])
+            ])
+            (subelem "nosharepages" [ ] [ ])
+            (subelem "locked" [ ] [ ])
             (subelem "source" [ (subattr "type" typeString) ] [ ])
             (subelem "access" [ (subattr "mode" typeString) ] [ ])
+            (subelem "allocation" [ (subattr "mode" typeString) (subattr "threads" typeInt) ] [ ])
+            (subelem "discard" [ ] [ ])
           ]
         )
         (subelem "features" [ ]
@@ -64,6 +106,14 @@ let
                 (subelem "evmcs" [ (subattr "state" typeBoolOnOff) ] [ ])
               ])
             (subelem "vmport" [ (subattr "state" typeBoolOnOff) ] [ ])
+            (subelem "kvm" [ ] [
+              (subelem "hidden" [ (subattr "state" typeBoolOnOff) ] [ ])
+              (subelem "hint-dedicated" [ (subattr "state" typeBoolOnOff) ] [ ])
+              (subelem "poll-control" [ (subattr "state" typeBoolOnOff) ] [ ])
+              (subelem "pv-ipi" [ (subattr "state" typeBoolOnOff) ] [ ])
+              (subelem "dirty-ring" [ (subattr "state" typeBoolOnOff) (subattr "size" typeInt) ] [ ])
+            ])
+            (subelem "ioapic" [ (subattr "driver" typeString) ] [ ])
           ]
         )
         (subelem "cpu"
@@ -89,6 +139,14 @@ let
               ]
               [ ]
             )
+            (subelem "cache" [
+              (subattr "level" typeInt)
+              (subattr "mode" typeString)
+            ] [ ])
+            (subelem "feature" [
+              (subattr "policy" typeString)
+              (subattr "name" typeString)
+            ] [ ])
           ]
         )
         (subelem "clock"
@@ -99,9 +157,22 @@ let
             (subelem "timer"
               [
                 (subattr "name" typeString)
+                (subattr "track" typeString)
                 (subattr "tickpolicy" typeString)
+                (subattr "frequency" typeInt)
+                (subattr "mode" typeString)
                 (subattr "present" typeBoolYesNo)
-              ] [ ])
+              ]
+              [
+                (subelem "catchup"
+                  [
+                    (subattr "threshold" typeInt)
+                    (subattr "slew" typeInt)
+                    (subattr "limit" typeInt)
+                  ] [ ]
+                )
+              ]
+            )
           ]
         )
         (subelem "on_poweroff" [ ] typeString)
@@ -146,20 +217,60 @@ let
             [
               (subelem "emulator" [ ] typePath)
               (subelem "disk" [ (subattr "type" typeString) (subattr "device" typeString) ]
-                [
-                  (subelem "driver"
-                    [
-                      (subattr "name" typeString)
-                      (subattr "type" typeString)
-                      (subattr "cache" typeString)
-                      (subattr "discard" typeString)
-                    ] [ ]
-                  )
-                  (subelem "source" [ (subattr "file" typePath) (subattr "startupPolicy" typeString) ] [ ])
-                  targetelem
-                  (subelem "readonly" [ ] [ ])
-                  addresselem
-                ]
+                (
+                  let
+                    backingStuff =
+                      [
+                        (subelem "source"
+                          [
+                            (subattr "file" typePath)
+                            (subattr "startupPolicy" typeString)
+                            (subattr "protocol" typeString)
+                            (subattr "name" typeString)
+                            (subattr "query" typeString)
+                            (subattr "dev" typePath)
+                            (subattr "pool" typeString)
+                            (subattr "volume" typeString)
+                            (subattr "dir" typePath)
+                            (subattr "type" typeString)
+                            (subattr "path" typePath)
+                          ]
+                          [
+                            (subelem "host"
+                              [
+                                (subattr "name" typeString)
+                                (subattr "port" typeInt)
+                              ]
+                              [ ])
+                          ])
+                        (subelem "backingStore" [ (subattr "type" typeString) ]
+                          (
+                            [
+                              (subelem "format" [ (subattr "type" typeString) ] [ ])
+                            ] ++
+                            backingStuff
+                          )
+                        )
+                      ];
+                  in
+                  [
+                    (subelem "driver"
+                      [
+                        (subattr "name" typeString)
+                        (subattr "type" typeString)
+                        (subattr "cache" typeString)
+                        (subattr "discard" typeString)
+                      ] [ ]
+                    )
+                  ] ++
+                  backingStuff ++
+                  [
+                    targetelem
+                    (subelem "readonly" [ ] [ ])
+                    addresselem
+                    (subelem "boot" [ (subattr "order" typeInt) ] [ ])
+                  ]
+                )
               )
               (subelem "filesystem" [ (subattr "type" typeString) (subattr "accessmode" typeString) ]
                 [
@@ -190,6 +301,27 @@ let
                   targetelem
                   addresselem
                 ])
+              (subelem "hostdev"
+                [
+                  (subattr "mode" typeString)
+                  (subattr "type" typeString)
+                  (subattr "managed" typeBoolYesNo)
+                ]
+                [
+                  (subelem "source" [ ] [ addresselem ])
+                  (subelem "boot" [ (subattr "order" typeInt) ] [ ])
+                  addresselem
+                ]
+              )
+              (subelem "shmem"
+                [
+                  (subattr "name" typeString)
+                ]
+                [
+                  (subelem "model" [ (subattr "type" typeString) ] [ ])
+                  (subelem "size" [ (subattr "unit" typeString) ] (sub "count" typeInt))
+                ]
+              )
               (subelem "interface"
                 [
                   (subattr "type" typeString)
@@ -255,9 +387,37 @@ let
                   (subelem "backend" [ (subattr "model" typeString) ] (sub "source" typePath))
                   addresselem
                 ])
-              (subelem "memballoon" [ (subattr "model" typeString) ] [ addresselem ])
+              (subelem "memballoon"
+                [
+                  (subattr "model" typeString)
+                  (subattr "autodeflate" typeBoolOnOff)
+                  (subattr "freePageReporting" typeBoolOnOff)
+                ]
+                [ addresselem ])
             ]
         )
+        (sub "qemu-commandline" (elem "commandline"
+          [ (attr "xmlns" (typeConstant "http://libvirt.org/schemas/domain/qemu/1.0")) ]
+          [
+            (subelem "arg" [ (subattr "value" typeString) ] [ ])
+            (subelem "env" [ (subattr "name" typeString) (subattr "value" typeString) ] [ ])
+          ]))
+        (sub "qemu-override" (elem "override"
+          [ (attr "xmlns" (typeConstant "http://libvirt.org/schemas/domain/qemu/1.0")) ]
+          [
+            (subelem "device"
+              [
+                (subattr "alias" typeString)
+              ]
+              [
+                (subelem "frontend" [ ]
+                  [
+                    (subelem "property"
+                      [ (subattr "name" typeString) (subattr "type" typeString) (subattr "value" typeString) ]
+                      [ ])
+                  ])
+              ])
+          ]))
       ];
 
 in
