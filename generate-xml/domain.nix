@@ -355,6 +355,7 @@ let
                       (subattr "vgamem" typeInt)
                       (subattr "heads" typeInt)
                       (subattr "primary" typeBoolYesNo)
+                      (subattr "blob" typeBoolYesNo)
                     ]
                     [
                       (subelem "acceleration" [ (subattr "accel3d" typeBoolYesNo) ] [ ])
