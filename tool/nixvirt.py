@@ -60,6 +60,12 @@ class ObjectConnection:
 
     def fromName(self,name):
         return self._fromLVObject(self._lookupByName(name))
+    
+    def fromNameOrNone(self,objid):
+        try:
+            return self._fromLVObject(self._lookupByName(name))
+        except libvirt.libvirtError:
+            return None
 
     def _fromXML(self,defn):
         return self._fromLVObject(self._defineXML(defn))
