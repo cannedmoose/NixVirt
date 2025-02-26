@@ -19,7 +19,7 @@ class TypeSpec:
         allObjects = self.oc.getAll()
         keepUUIDs = [objspec.specUUID for objspec in self.specList]
         for object in allObjects:
-            if object.uuid in keepUUIDs:
+            if object.uuid in keepUUIDs or not object._lvobj.isPersistent():
                 pass
             else:
                 object.undefine()
