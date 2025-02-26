@@ -188,7 +188,7 @@ class NetworkConnection(ObjectConnection):
         return deps
     def _fixDefinitionETree(self,objid,specDefETree):
         addresses = specDefETree.xpath("/network/mac/@address")
-        if len(addresses) == 0:
+        if len(addresses) == 0 and objid is not None:
             fwdMode = specDefETree.xpath("/network/forward/@mode")
             if fwdMode in [None, 'route', 'nat']:
                 addr = self._assignMacAddress(objid,0)
