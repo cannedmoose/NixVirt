@@ -358,13 +358,12 @@ class ObjectSpec:
         specDefETree = xmlToETree(specDefXML)
         specUUID = None
         specName = specDefETree.find("name").text
-        specUUIDElem = specDefXML.find("uuid")
+        specUUIDElem = specDefETree.find("uuid")
         if specUUIDElem is not None:
             specUUID = uuid.UUID(specUUIDElem.text).bytes
             subject = oc.fromUUIDOrNone(self.specUUID)
         else:
             subject = oc.fromNameOrNone(self.specName)
-            specUUID = None
             if subject:
                 specUUID = self.subject.uuid
 
