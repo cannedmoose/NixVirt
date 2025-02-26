@@ -61,7 +61,7 @@ class ObjectConnection:
     def fromName(self,name):
         return self._fromLVObject(self._lookupByName(name))
     
-    def fromNameOrNone(self,objid):
+    def fromNameOrNone(self,name):
         try:
             return self._fromLVObject(self._lookupByName(name))
         except libvirt.libvirtError:
