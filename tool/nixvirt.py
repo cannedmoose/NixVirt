@@ -367,11 +367,10 @@ class ObjectSpec:
         specUUIDElem = specDefETree.find("uuid")
         if specUUIDElem is not None:
             specUUID = uuid.UUID(specUUIDElem.text).bytes
-            subject = oc.fromUUIDOrNone(self.specUUID)
         else:
-            subject = oc.fromNameOrNone(self.specName)
+            subject = oc.fromNameOrNone(specName)
             if subject:
-                specUUID = self.subject.uuid
+                specUUID = subject.uuid
 
         fixedDefETree = oc._fixDefinitionETree(specUUID,specDefETree)
         if fixedDefETree is not None:
