@@ -36,7 +36,10 @@ class ObjectConnection:
         self.conn = session.conn
 
     def vreport(self,objid,msg):
-        self.session.vreport(self.type + " " + str(uuid.UUID(bytes=objid)) + ": " + msg)
+        i = "NULL"
+        if objid:
+            i = str(uuid.UUID(bytes=objid))
+        self.session.vreport(self.type + " " + i + ": " + msg)
 
     def getFile(self,path):
         self.session.vreport(self.type + ": reading " + path)
@@ -137,7 +140,7 @@ class DomainConnection(ObjectConnection):
         index = 0
         for interface in interfaces:
             addresses = interface.xpath("/interface/mac/@address")
-            if len(addresses) == 0:
+            if len(addresses) == 0 and objid is not None:
                 addr = self._assignMacAddress(objid,index)
                 mac = lxml.etree.Element("mac")
                 mac.attrib["address"] = addr
@@ -334,8 +337,9 @@ class ObjectSpec:
         if specUUID is not None:
             self.subject = oc.fromUUIDOrNone(specUUID)
         elif specName is not None:
-            self.subject = oc.fromName(specName)
-            specUUID = self.subject.uuid
+            self.subject = oc.fromNameOrNone(specName)
+            if self.subject is not None:
+                specUUID = self.subject.uuid
         else:
             self.subject = None
         if active is None:
@@ -365,14 +369,20 @@ class ObjectSpec:
         specUUID = None
         specName = specDefETree.find("name").text
         specUUIDElem = specDefETree.find("uuid")
+        subject = None
         if specUUIDElem is not None:
             specUUID = uuid.UUID(specUUIDElem.text).bytes
+            subject = oc.fromUUIDOrNone(specUUID)
         else:
             subject = oc.fromNameOrNone(specName)
             if subject:
                 specUUID = subject.uuid
+                newuuid = lxml.etree.Element("uuid")
+                newuuid.text = subject._lvobj.UUIDString()
+                specDefETree.append(newuuid)
+                specDefXML = eTreeToXML(specDefETree)
 
-        fixedDefETree = oc._fixDefinitionETree(specUUID,specDefETree)
+        fixedDefETree = oc._fixDefinitionETree(specUUID, specDefETree)
         if fixedDefETree is not None:
             specDefXML = eTreeToXML(fixedDefETree)
         return ObjectSpec(oc,specUUID = specUUID,specName = specName,specDefXML = specDefXML,active = active,restart = restart, extra = extra)

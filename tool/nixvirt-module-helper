@@ -76,6 +76,7 @@ except nixvirt.NixVirtError as err:
 
 except libvirt.libvirtError as err:
     print ("NixVirt: libvirt error:", err, file=sys.stderr)
+    raise err
     sys.exit(1)
 
 except lxml.etree.XMLSyntaxError as err:
